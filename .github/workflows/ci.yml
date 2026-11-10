@@ -1,0 +1,9 @@
+name: AVD FSLogix DR Verification
+on: [push]
+jobs:
+  pester:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - shell: pwsh
+        run: Invoke-Pester -Path ./tests/FslogixFailover.Tests.ps1 -Output Detailed

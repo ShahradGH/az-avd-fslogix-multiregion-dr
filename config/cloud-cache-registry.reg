@@ -1,0 +1,6 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\FSLogix\Profiles]
+"Enabled"=dword:00000001
+"ClearCacheOnLogoff"=dword:00000000
+"HealthyProvidersRequiredForRegister"=dword:00000001

@@ -1,0 +1,6 @@
+{
+  "primaryHostPool": "vdpool-uks-01",
+  "primaryNetworkIsolated": true,
+  "orphanedSmbLeaseCount": 342,
+  "standbyStorageIopsPercent": 44.2
+}
