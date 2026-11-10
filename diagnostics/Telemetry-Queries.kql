@@ -1,0 +1,7 @@
+// Correlate AVD session logon failures with Azure Files VHDX lease contention
+StorageFileLogs
+| where TimeGenerated > ago(30m)
+| where Uri has ".vhdx" and StatusText has_any ("SharingViolation", "LeaseAlreadyPresent", "ClientOtherError")
+| summarize ContentionCount = count(), AffectedProfiles = dcount(Uri) by AccountName, CallerIpAddress, bin(TimeGenerated, 1m)
+| where ContentionCount > 10
+| order by ContentionCount desc
