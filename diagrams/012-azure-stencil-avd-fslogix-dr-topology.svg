@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080" font-family="Segoe UI, Inter, Arial, sans-serif">
+  <defs>
+    <marker id="avdBlue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,1 L10,6 L0,11 Z" fill="#38bdf8"/></marker>
+    <marker id="avdGreen" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,1 L10,6 L0,11 Z" fill="#34d399"/></marker>
+    <marker id="avdRed" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,1 L10,6 L0,11 Z" fill="#f87171"/></marker>
+    <marker id="avdAmber" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,1 L10,6 L0,11 Z" fill="#fbbf24"/></marker>
+  </defs>
+  <rect width="1920" height="1080" fill="#0a1128"/>
+  <text x="64" y="64" fill="#f8fafc" font-size="32" font-weight="700">AVD &amp; FSLogix Multi-Region DR Topology: Fenced Lease Release &amp; AI IOPS Triage</text>
+  <text x="64" y="98" fill="#94a3b8" font-size="18">Primary Region (UK South 198.51.100.0/24) -&gt; Secondary Region (UK West 203.0.113.0/24) | Azure Files Premium</text>
+
+  <!-- Primary Region -->
+  <rect x="64" y="145" width="520" height="440" rx="14" fill="#0f172a" stroke="#f87171" stroke-width="2"/>
+  <text x="92" y="185" fill="#f87171" font-size="20" font-weight="700">Primary Region: UK South (Degraded / Fenced)</text>
+  <rect x="92" y="216" width="464" height="110" rx="8" fill="#1e293b" stroke="#f87171"/>
+  <text x="112" y="248" fill="#f8fafc" font-size="17" font-weight="600">AVD HostPool: vdpool-uks-01</text>
+  <text x="112" y="274" fill="#fca5a5" font-size="14">Drain Mode: allowNewSession = false (PATCH 2024-04-03)</text>
+  <text x="112" y="298" fill="#cbd5e1" font-size="13">Subnet: 198.51.100.0/24 | Orphaned .vhdx handles</text>
+
+  <rect x="92" y="348" width="464" height="96" rx="8" fill="#450a0a" stroke="#f87171" stroke-width="2"/>
+  <text x="112" y="382" fill="#f87171" font-size="17" font-weight="700">NSG Hard Fence: DENY Outbound 445/TCP</text>
+  <text x="112" y="408" fill="#fee2e2" font-size="14">Blocks split-brain writes before Storage forceCloseHandles</text>
+
+  <rect x="92" y="464" width="464" height="96" rx="8" fill="#1e293b" stroke="#64748b"/>
+  <text x="112" y="496" fill="#f8fafc" font-size="16" font-weight="600">Primary Azure Files Premium (Sync Source)</text>
+  <text x="112" y="522" fill="#cbd5e1" font-size="14">Cloud Cache (CCDLocations) Async Replication</text>
+
+  <!-- Center: AI Triage & Control Plane -->
+  <rect x="650" y="145" width="620" height="440" rx="14" fill="#0f172a" stroke="#fbbf24" stroke-width="2"/>
+  <text x="678" y="185" fill="#fbbf24" font-size="20" font-weight="700">AI Incident Triage &amp; PowerShell 7.4 Control Plane</text>
+
+  <rect x="678" y="216" width="564" height="150" rx="8" fill="#1e293b" stroke="#38bdf8" stroke-width="2"/>
+  <text x="698" y="248" fill="#38bdf8" font-size="17" font-weight="700">AI IOPS Saturation &amp; Profile-Lock Advisor</text>
+  <text x="698" y="276" fill="#e2e8f0" font-size="14">- Ingests WVDConnections + Azure Files SMB latency</text>
+  <text x="698" y="300" fill="#e2e8f0" font-size="14">- Predicts 45 IOPS/user logon storm vs 80% ceiling</text>
+  <text x="698" y="324" fill="#e2e8f0" font-size="14">- Computes OptimalBatchSize (50..350) &amp; Interval (90s/150s)</text>
+  <text x="698" y="348" fill="#94a3b8" font-size="13">ai/Invoke-FslogixIncidentTriage.ps1 | Abstains if Conf &lt; 0.75</text>
+
+  <rect x="678" y="388" width="564" height="172" rx="8" fill="#1e293b" stroke="#34d399" stroke-width="2"/>
+  <text x="698" y="420" fill="#34d399" font-size="17" font-weight="700">Fenced Storage REST &amp; AVD Orchestrator</text>
+  <text x="698" y="448" fill="#e2e8f0" font-size="14">1. Veto if PrimarySubnetPort445Blocked == false</text>
+  <text x="698" y="472" fill="#e2e8f0" font-size="14">2. Invoke-AzRestMethod POST .../forceCloseHandles (2023-05-01)</text>
+  <text x="698" y="496" fill="#e2e8f0" font-size="14">3. Staggered PATCH .../sessionHosts allowNewSession = true</text>
+  <text x="698" y="528" fill="#94a3b8" font-size="13">src/Invoke-FencedFslogixLeaseRelease.ps1 + Set-AvdStaggeredDrainMode.ps1</text>
+
+  <!-- Secondary Region -->
+  <rect x="1336" y="145" width="520" height="440" rx="14" fill="#0f172a" stroke="#34d399" stroke-width="2"/>
+  <text x="1364" y="185" fill="#34d399" font-size="20" font-weight="700">Secondary Region: UK West (Active DR)</text>
+  <rect x="1364" y="216" width="464" height="150" rx="8" fill="#1e293b" stroke="#34d399"/>
+  <text x="1384" y="248" fill="#f8fafc" font-size="17" font-weight="600">Standby HostPool: vdpool-ukw-01</text>
+  <text x="1384" y="276" fill="#d1fae5" font-size="14">Subnet: 203.0.113.0/24 | Staggered Wave Release</text>
+  <text x="1384" y="302" fill="#cbd5e1" font-size="14">Batch Size: OptimalBatchSize every 150s</text>
+  <text x="1384" y="328" fill="#94a3b8" font-size="13">Prevents simultaneous 450-user logon storm</text>
+
+  <rect x="1364" y="388" width="464" height="172" rx="8" fill="#1e293b" stroke="#38bdf8"/>
+  <text x="1384" y="420" fill="#38bdf8" font-size="17" font-weight="700">Standby Azure Files Premium Share</text>
+  <text x="1384" y="448" fill="#e2e8f0" font-size="14">Private Endpoint | Provisioned 25,000-40,000 IOPS</text>
+  <text x="1384" y="474" fill="#cbd5e1" font-size="14">Safe Ceiling: &lt;= 80% IOPS | Latency &lt;= 15 ms</text>
+  <text x="1384" y="502" fill="#34d399" font-size="13">Mounts clean .vhdx profiles after fenced release</text>
+
+  <!-- Bottom: Teams Ops Bridge & KQL -->
+  <rect x="64" y="635" width="880" height="360" rx="14" fill="#0f172a" stroke="#818cf8" stroke-width="2"/>
+  <text x="92" y="675" fill="#a5b4fc" font-size="20" font-weight="700">Microsoft Graph v1.0 Teams Ops Bridge (graph/Post-AvdFailoverStatus.ps1)</text>
+  <rect x="92" y="708" width="824" height="250" rx="8" fill="#1e293b" stroke="#818cf8"/>
+  <text x="114" y="746" fill="#f8fafc" font-size="17" font-weight="600">POST /v1.0/teams/{teamId}/channels/{channelId}/messages</text>
+  <text x="114" y="780" fill="#e2e8f0" font-size="15">- Adaptive Card v1.5 posted to Incident Ops Bridge</text>
+  <text x="114" y="810" fill="#e2e8f0" font-size="15">- Reports RootCauseCode, PredictedPeakIopsPct, OptimalBatchSize</text>
+  <text x="114" y="840" fill="#e2e8f0" font-size="15">- Reports exact Fenced VHDX Handles Closed count</text>
+  <text x="114" y="876" fill="#34d399" font-size="14">Gives C-suite &amp; Service Desk live RTO visibility without manual status calls</text>
+
+  <rect x="980" y="635" width="876" height="360" rx="14" fill="#0f172a" stroke="#38bdf8" stroke-width="2"/>
+  <text x="1008" y="675" fill="#38bdf8" font-size="20" font-weight="700">Observability &amp; Pester 6.x Verification</text>
+  <rect x="1008" y="708" width="820" height="120" rx="8" fill="#1e293b" stroke="#64748b"/>
+  <text x="1030" y="744" fill="#f8fafc" font-size="17" font-weight="600">Azure Monitor Log Analytics (queries/Fslogix-VHDX-LockContention.kql)</text>
+  <text x="1030" y="774" fill="#cbd5e1" font-size="14">Correlates WVDConnections errors, SMB ServerLatencyMs, and STATUS_SHARING_VIOLATION</text>
+  <rect x="1008" y="846" width="820" height="112" rx="8" fill="#1e293b" stroke="#64748b"/>
+  <text x="1030" y="882" fill="#f8fafc" font-size="17" font-weight="600">Pester 6.x Verification Matrix (tests/FslogixFailover.Tests.ps1)</text>
+  <text x="1030" y="912" fill="#cbd5e1" font-size="14">12 automated tests validating split-brain veto, IOPS stagger math, REST handle close &amp; Graph card</text>
+
+  <!-- Connectors -->
+  <line x1="584" y1="290" x2="674" y2="290" stroke="#fbbf24" stroke-width="3" marker-end="url(#avdAmber)"/>
+  <line x1="1242" y1="290" x2="1360" y2="290" stroke="#34d399" stroke-width="3" marker-end="url(#avdGreen)"/>
+  <line x1="1242" y1="474" x2="1360" y2="474" stroke="#38bdf8" stroke-width="3" marker-end="url(#avdBlue)"/>
+  <line x1="556" y1="512" x2="1360" y2="512" stroke="#64748b" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#avdBlue)"/>
+  <line x1="780" y1="560" x2="520" y2="631" stroke="#818cf8" stroke-width="3" marker-end="url(#avdBlue)"/>
+</svg>

@@ -1,83 +1,126 @@
 BeforeAll {
     $script:RepoRoot = Split-Path -Parent $PSScriptRoot
-    $script:EvaluatorPath = Join-Path $script:RepoRoot 'src/Invoke-FencedFslogixLeaseRelease.ps1'
+    $script:TriagePath = Join-Path $script:RepoRoot 'ai/Invoke-FslogixIncidentTriage.ps1'
+    $script:LeasePath = Join-Path $script:RepoRoot 'src/Invoke-FencedFslogixLeaseRelease.ps1'
+    $script:DrainPath = Join-Path $script:RepoRoot 'src/Set-AvdStaggeredDrainMode.ps1'
+    $script:GraphStatusPath = Join-Path $script:RepoRoot 'graph/Post-AvdFailoverStatus.ps1'
+    $script:FixturesPath = Join-Path $script:RepoRoot 'fixtures/hostpool-session-state.json'
     $script:KqlPath = Join-Path $script:RepoRoot 'queries/Fslogix-VHDX-LockContention.kql'
+    $script:Scenarios = Get-Content -Path $script:FixturesPath -Raw | ConvertFrom-Json
 }
 
-Describe 'AVD Resilience: Resolving FSLogix Profile Container Lock Contention in Multi-Region DR - 16-Test Verification Matrix' {
-    Context 'Positive Path: Structural & Domain Contract Verification (8 Tests)' {
-        It 'P-01: Primary PowerShell evaluator (src/Invoke-FencedFslogixLeaseRelease.ps1) exists and is non-empty' {
-            Test-Path $script:EvaluatorPath | Should -BeTrue
-            (Get-Item $script:EvaluatorPath).Length | Should -BeGreaterThan 120
-        }
-        It 'P-02: Evaluator parses cleanly with zero PowerShell AST syntax errors' {
-            $errors = $null
-            [System.Management.Automation.Language.Parser]::ParseFile($script:EvaluatorPath, [ref]$null, [ref]$errors)
-            $errors.Count | Should -Be 0
-        }
-        It 'P-03: Enforces CmdletBinding and typed parameter block' {
-            $raw = Get-Content $script:EvaluatorPath -Raw
-            $raw | Should -Match '\[CmdletBinding\(\)\]'
-            $raw | Should -Match 'param\s*\('
-        }
-        It 'P-04: Returns structured PSCustomObject decision payload for downstream audit' {
-            $raw = Get-Content $script:EvaluatorPath -Raw
-            $raw | Should -Match '\[PSCustomObject\]@\{'
-        }
-        It 'P-05: KQL telemetry query (queries/Fslogix-VHDX-LockContention.kql) defines correlation and filtering clauses' {
-            Test-Path $script:KqlPath | Should -BeTrue
-            (Get-Content $script:KqlPath -Raw) | Should -Match 'where|summarize|project'
-        }
-        It 'P-06: Domain artefact config/cloud-cache-registry.reg exists and is non-empty' {
-            $p = Join-Path $script:RepoRoot 'config/cloud-cache-registry.reg'
-            Test-Path $p | Should -BeTrue
-            (Get-Item $p).Length | Should -BeGreaterThan 20
+Describe 'AVD FSLogix Multi-Region DR - AI Triage, Fenced Lease Release & Graph Ops Bridge' {
+    Context 'AI IOPS Saturation & Profile-Lock Advisor (ai/Invoke-FslogixIncidentTriage.ps1)' {
+        It 'Detects IOPS saturation storm and computes throttled stagger batch size' {
+            $s = $script:Scenarios | Where-Object { $_.scenario -eq 'IopsSaturationThrottle' }
+            $res = & $script:TriagePath -TelemetrySnapshot $s
+            $res.RootCauseCode | Should -Be 'IOPS_SATURATION_THROTTLE'
+            $res.SafeToFailover | Should -BeTrue
+            $res.PredictedPeakIopsPct | Should -BeGreaterThan 80.0
+            $res.OptimalBatchSize | Should -BeGreaterOrEqual 50
+            $res.BatchIntervalSeconds | Should -Be 150
         }
 
-        It 'P-07: Domain artefact infra/avd-hostpool-dr.bicep exists and is non-empty' {
-            $p = Join-Path $script:RepoRoot 'infra/avd-hostpool-dr.bicep'
-            Test-Path $p | Should -BeTrue
-            (Get-Item $p).Length | Should -BeGreaterThan 20
+        It 'Approves healthy staggered failover within IOPS ceiling' {
+            $s = $script:Scenarios | Where-Object { $_.scenario -eq 'HealthyStaggeredFailover' }
+            $res = & $script:TriagePath -TelemetrySnapshot $s
+            $res.RootCauseCode | Should -Be 'HEALTHY_STAGGERED_FAILOVER'
+            $res.SafeToFailover | Should -BeTrue
+            $res.BatchIntervalSeconds | Should -Be 90
         }
 
-        It 'P-08: Domain artefact infra/azure-files-premium.bicep exists and is non-empty' {
-            $p = Join-Path $script:RepoRoot 'infra/azure-files-premium.bicep'
-            Test-Path $p | Should -BeTrue
-            (Get-Item $p).Length | Should -BeGreaterThan 20
+        It 'Vetoes failover when primary network is not isolated (split-brain risk)' {
+            $s = $script:Scenarios | Where-Object { $_.scenario -eq 'UnfencedSplitBrainRisk' }
+            $res = & $script:TriagePath -TelemetrySnapshot $s
+            $res.RootCauseCode | Should -Be 'PRIMARY_SUBNET_SPLIT_BRAIN_RISK'
+            $res.SafeToFailover | Should -BeFalse
+            $res.OptimalBatchSize | Should -Be 0
+        }
+
+        It 'Abstains when telemetry is incomplete (ABSTAIN_TELEMETRY_GAP)' {
+            $s = $script:Scenarios | Where-Object { $_.scenario -eq 'TelemetryGapAbstention' }
+            $res = & $script:TriagePath -TelemetrySnapshot $s
+            $res.RootCauseCode | Should -Be 'ABSTAIN_TELEMETRY_GAP'
+            $res.SafeToFailover | Should -BeFalse
+            $res.Confidence | Should -BeLessThan 0.75
+        }
+
+        It 'Integrates mocked Azure AI Foundry triage summary' {
+            $s = $script:Scenarios | Where-Object { $_.scenario -eq 'IopsSaturationThrottle' }
+            $mockFoundry = {
+                param($ep, $dep, $body)
+                return [PSCustomObject]@{
+                    triageSummary            = 'Enable Cloud Cache passive async hydration and stagger 200 users per wave.'
+                    cloudCacheRecommendation = 'CCDLocations=type=smb,connectionString=\\stcontosofslogixdr.file.core.windows.net\profiles'
+                    confidenceAdjustment     = 0.03
+                }
+            }
+            $res = & $script:TriagePath -TelemetrySnapshot $s -FoundryEndpoint 'https://foundry.contoso.invalid' -FoundryInvoker $mockFoundry
+            $res.FoundryAdvisory.triageSummary | Should -Match 'Cloud Cache'
         }
     }
 
-    Context 'Negative Path: Refusal Gates & Zero-Leak Security Boundaries (8 Tests)' {
-        It 'N-01: Evaluator defines explicit refusal, hold, or veto action codes' {
-            $raw = Get-Content $script:EvaluatorPath -Raw
-            $raw | Should -Match 'VETO|BLOCK|HOLD|DENY|REFUSAL|QUARANTINE|REVOKE|ALERT|\$false'
+    Context 'Fenced Storage REST Lease Breaker, AVD Drain Mode & Graph Ops Bridge' {
+        It 'Refuses to break SMB leases when primary subnet 445/TCP is not blocked' {
+            $state = [PSCustomObject]@{ ShareName = 'fslogix-profiles'; PrimarySubnetPort445Blocked = $false; PrimaryHostsInDrainMode = $true }
+            $handles = @([PSCustomObject]@{ HandleId = 'h1'; Path = 'profiles/alex.vhdx'; ClientIp = '198.51.100.12' })
+            $res = & $script:LeasePath -FailoverState $state -OpenFileHandles $handles
+            $res.Action | Should -Be 'VETO_UNFENCED_PRIMARY_HOSTS_SPLIT_BRAIN_RISK'
+            $res.HandlesClosed | Should -Be 0
+            $res.SafeToProceed | Should -BeFalse
         }
-        It 'N-02: Evaluator contains zero hardcoded storage keys, passwords, or SAS tokens' {
-            $raw = Get-Content $script:EvaluatorPath -Raw
-            $raw | Should -Not -Match 'AccountKey=|SharedAccessSignature=|Password='
+
+        It 'Calls Azure Storage forceCloseHandles via Invoke-AzRestMethod for fenced .vhdx handles only' {
+            $state = [PSCustomObject]@{ ShareName = 'fslogix-profiles'; PrimarySubnetPort445Blocked = $true; PrimaryHostsInDrainMode = $true }
+            $handles = @(
+                [PSCustomObject]@{ HandleId = 'h1'; Path = 'profiles/alex.vhdx'; ClientIp = '198.51.100.12' },
+                [PSCustomObject]@{ HandleId = 'h2'; Path = 'profiles/other.txt'; ClientIp = '198.51.100.13' },
+                [PSCustomObject]@{ HandleId = 'h3'; Path = 'profiles/sec.vhdx'; ClientIp = '203.0.113.55' }
+            )
+            $calls = [System.Collections.Generic.List[string]]::new()
+            $mockAz = { param($m, $p, $b) $calls.Add("$m $p"); return @{} }
+            $res = & $script:LeasePath -FailoverState $state -OpenFileHandles $handles -AzRestInvoker $mockAz
+            $res.Action | Should -Be 'CLOSE_FENCED_ORPHANED_VHDX_HANDLES'
+            $res.HandlesClosed | Should -Be 1
+            $calls[0] | Should -Match 'forceCloseHandles\?api-version=2023-05-01'
         }
-        It 'N-03: Evaluator contains zero private orchestrator domains or internal host IPs' {
-            $raw = Get-Content $script:EvaluatorPath -Raw
-            $raw | Should -Not -Match '192\.142\.41\.43|mvpfoundry\.alerasoul\.net'
+
+        It 'Sets AVD session host drain mode via Invoke-AzRestMethod' {
+            $calls = [System.Collections.Generic.List[string]]::new()
+            $mockAz = { param($m, $p, $b) $calls.Add("$m $p"); return @{} }
+            $res = & $script:DrainPath -HostPoolName 'vdpool-uks-01' -SessionHostNames @('avd-01.contoso.com', 'avd-02.contoso.com') -AllowNewSession $false -AzRestInvoker $mockAz
+            $res.Mode | Should -Be 'DrainModeEnabled'
+            $res.UpdatedHosts.Count | Should -Be 2
+            $calls[0] | Should -Match 'Microsoft\.DesktopVirtualization/hostPools/vdpool-uks-01/sessionHosts'
         }
-        It 'N-04: KQL query contains zero internal sequence tags or private URLs' {
-            $kql = Get-Content $script:KqlPath -Raw
-            $kql | Should -Not -Match 'mvpfoundry\.alerasoul\.net|Decision Pack 0'
+
+        It 'Posts Teams Ops Bridge Adaptive Card via Graph v1.0' {
+            $s = $script:Scenarios | Where-Object { $_.scenario -eq 'IopsSaturationThrottle' }
+            $triage = & $script:TriagePath -TelemetrySnapshot $s
+            $captured = [System.Collections.Generic.List[string]]::new()
+            $mockGraph = { param($m, $u, $b) $captured.Add("$m $u"); return [PSCustomObject]@{ id = 'msg-dr-12' } }
+            $res = & $script:GraphStatusPath -TeamId 'team-dr' -ChannelId '19:ops@thread.tacv2' -TriageResult $triage -HandlesReleased 42 -GraphInvoker $mockGraph
+            $res.MessageId | Should -Be 'msg-dr-12'
+            $captured[0] | Should -Match 'https://graph\.microsoft\.com/v1\.0/teams/team-dr/channels/'
         }
-        It 'N-05: README documentation contains zero internal sequence numbering' {
-            $readme = Get-Content (Join-Path $script:RepoRoot 'README.md') -Raw
-            $readme | Should -Not -Match 'Decision Pack 0|mvpfoundry\.alerasoul\.net'
+    }
+
+    Context 'Repository Hygiene & Zero-Leak Boundaries' {
+        It 'Contains zero declarative IaC (.bicep or .tf) files' {
+            $iac = Get-ChildItem -Path $script:RepoRoot -Recurse -Include '*.bicep', '*.tf' -File
+            $iac.Count | Should -Be 0
         }
-        It 'N-06: Enforces fail-closed ErrorActionPreference or deterministic condition branches' {
-            $raw = Get-Content $script:EvaluatorPath -Raw
-            $raw | Should -Match 'ErrorActionPreference|if\s*\('
+
+        It 'KQL lock-contention query exists and uses projection/aggregation' {
+            Test-Path $script:KqlPath | Should -BeTrue
+            (Get-Content $script:KqlPath -Raw) | Should -Match 'where|summarize|project'
         }
-        It 'N-07: Repository root excludes internal agent guidelines or pre-commit hook scripts' {
-            Test-Path (Join-Path $script:RepoRoot 'AGENTS.md') | Should -BeFalse
-            Test-Path (Join-Path $script:RepoRoot '.githooks') | Should -BeFalse
-        }
-        It 'N-08: Open-source MIT LICENSE is present at repository root' {
-            Test-Path (Join-Path $script:RepoRoot 'LICENSE') | Should -BeTrue
+
+        It 'README and runbooks contain zero internal sequence numbers or private orchestrator domains' {
+            foreach ($f in @((Join-Path $script:RepoRoot 'README.md'), (Join-Path $script:RepoRoot 'runbooks/AVD-REGIONAL-FAILOVER.md'))) {
+                $raw = Get-Content $f -Raw
+                $raw | Should -Not -Match 'mvpfoundry\.alerasoul\.net|192\.142\.41\.43|Decision Pack 0|idea-012'
+            }
         }
     }
 }

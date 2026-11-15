@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "2026.11.1",
+  "storageTier": "AzureFilesPremium",
+  "abstentionConfidenceThreshold": 0.75,
+  "iopsPerLogonBurst": 45,
+  "safeSaturationCeilingPercent": 80.0,
+  "criticalLatencyThresholdMs": 15.0,
+  "staggerBounds": {
+    "minBatchSize": 50,
+    "maxBatchSize": 350,
+    "baseIntervalSeconds": 90,
+    "highSaturationIntervalSeconds": 150
+  },
+  "failureSignatures": [
+    {
+      "code": "PRIMARY_SUBNET_SPLIT_BRAIN_RISK",
+      "description": "Primary region subnet still has 445/TCP SMB path open or hosts not in drain mode.",
+      "recommendedAction": "VETO_FAILOVER_UNTIL_NSG_FENCED"
+    },
+    {
+      "code": "IOPS_SATURATION_THROTTLE",
+      "description": "Predicted login-storm IOPS exceeds 80% of provisioned Azure Files Premium IOPS or SMB latency > 15ms.",
+      "recommendedAction": "THROTTLE_BATCH_STAGGER_AND_ENABLE_CLOUD_CACHE"
+    },
+    {
+      "code": "HEALTHY_STAGGERED_FAILOVER",
+      "description": "Primary fenced, orphaned VHDX handles safely cleared, standby IOPS within safe ceiling.",
+      "recommendedAction": "PROCEED_STAGGERED_FAILOVER"
+    }
+  ]
+}

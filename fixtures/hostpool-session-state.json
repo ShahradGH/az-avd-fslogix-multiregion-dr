@@ -1,6 +1,38 @@
-{
-  "primaryHostPool": "vdpool-uks-01",
-  "primaryNetworkIsolated": true,
-  "orphanedSmbLeaseCount": 342,
-  "standbyStorageIopsPercent": 44.2
-}
+[
+  {
+    "scenario": "IopsSaturationThrottle",
+    "primaryHostPool": "vdpool-uks-01",
+    "primaryNetworkIsolated": true,
+    "provisionedIops": 25000,
+    "currentIops": 11000,
+    "pendingReconnectUsers": 450,
+    "smbServerLatencyMs": 18.4,
+    "orphanedSmbLeaseCount": 342
+  },
+  {
+    "scenario": "HealthyStaggeredFailover",
+    "primaryHostPool": "vdpool-uks-02",
+    "primaryNetworkIsolated": true,
+    "provisionedIops": 40000,
+    "currentIops": 8000,
+    "pendingReconnectUsers": 200,
+    "smbServerLatencyMs": 4.2,
+    "orphanedSmbLeaseCount": 120
+  },
+  {
+    "scenario": "UnfencedSplitBrainRisk",
+    "primaryHostPool": "vdpool-uks-03",
+    "primaryNetworkIsolated": false,
+    "provisionedIops": 25000,
+    "currentIops": 9000,
+    "pendingReconnectUsers": 150,
+    "smbServerLatencyMs": 5.1,
+    "orphanedSmbLeaseCount": 88
+  },
+  {
+    "scenario": "TelemetryGapAbstention",
+    "primaryHostPool": "vdpool-uks-04",
+    "primaryNetworkIsolated": true,
+    "provisionedIops": 0
+  }
+]
