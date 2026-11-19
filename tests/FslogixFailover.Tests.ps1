@@ -123,4 +123,58 @@ Describe 'AVD FSLogix Multi-Region DR - AI Triage, Fenced Lease Release & Graph 
             }
         }
     }
+
+    Context 'Identity & Microsoft Graph v2.x AVD Resilience Module' {
+        BeforeAll {
+            Import-Module (Join-Path $script:RepoRoot 'identity/AvdIdentityResilience.psd1') -Force
+        }
+
+        It 'Filters eligible licensed Entra ID users from disabled or guest accounts' {
+            $mockGraph = {
+                param($method, $uri, $body)
+                if ($uri -match 'alex\.morgan') {
+                    return [PSCustomObject]@{
+                        userPrincipalName = 'alex.morgan@contoso.com'
+                        accountEnabled    = $true
+                        assignedLicenses  = @([PSCustomObject]@{ skuId = 'avd-sku-1' })
+                        userType          = 'Member'
+                    }
+                }
+                return [PSCustomObject]@{
+                    userPrincipalName = 'disabled.user@contoso.com'
+                    accountEnabled    = $false
+                    assignedLicenses  = @()
+                    userType          = 'Member'
+                }
+            }
+
+            $res = Get-AvdSessionUserEntraContext -UserPrincipalNames @('alex.morgan@contoso.com', 'disabled.user@contoso.com') -GraphInvoker $mockGraph
+            $res.EligibleCount | Should -Be 1
+            $res.BlockedCount | Should -Be 1
+        }
+
+        It 'Detects Conditional Access sign-in failures during regional failover storms' {
+            $mockGraph = {
+                param($method, $uri, $body)
+                return [PSCustomObject]@{
+                    value = @(
+                        [PSCustomObject]@{ userPrincipalName = 'alex@contoso.com'; conditionalAccessStatus = 'success'; riskLevelDuringSignIn = 'none' },
+                        [PSCustomObject]@{ userPrincipalName = 'sam@contoso.com'; conditionalAccessStatus = 'failure'; riskLevelDuringSignIn = 'high' }
+                    )
+                }
+            }
+
+            $res = Invoke-AvdConditionalAccessSignInCheck -AppDisplayName 'Azure Virtual Desktop' -GraphInvoker $mockGraph
+            $res.StormAuthHealthy | Should -BeFalse
+            $res.CaFailureCount | Should -Be 1
+            $res.FlaggedUsers | Should -Contain 'sam@contoso.com'
+        }
+
+        It 'Dispatches staggered AVD wave reconnection notice via Graph v1.0' {
+            $mockGraph = { param($m, $u, $b) return [PSCustomObject]@{ id = 'msg-wave-01' } }
+            $res = Send-AvdCohortReconnectNotice -TeamId 't-avd' -ChannelId 'c-avd' -WaveNumber 1 -BatchSize 45 -EstimatedWaitSeconds 120 -GraphInvoker $mockGraph
+            $res.Dispatched | Should -BeTrue
+            $res.MessageId | Should -Be 'msg-wave-01'
+        }
+    }
 }

@@ -4,7 +4,7 @@ Deterministic multi-region disaster recovery orchestration for **Azure Virtual D
 
 ---
 
-## Executive & C-Suite Brief
+## Executive & C-Suite Business Value
 
 ### Business Risk Addressed
 During a regional Azure outage, naive "flip-the-switch" AVD failovers fail in two predictable ways:
@@ -12,9 +12,16 @@ During a regional Azure outage, naive "flip-the-switch" AVD failovers fail in tw
 2. **Login-Storm Storage Collapse**: Reconnecting 500+ users simultaneously onto standby Azure Files Premium shares triggers massive `45 IOPS/user` logon bursts, saturating provisioned IOPS and causing 15+ minute black-screen logons.
 
 ### Measurable ROI & Operational Impact
+| DR Resilience Dimension | Naive Regional Failover | Fenced Lease Release & AI Login-Storm Triage |
+| :--- | :--- | :--- |
+| **VHDX Split-Brain Risk** | High (un-fenced SMB handle breaks) | **Zero** (`445/TCP` NSG-fence + host-drain veto) |
+| **Standby Storage Saturation** | >100% IOPS collapse (black screens) | **Capped below 80%** via AI-computed wave batching |
+| **Identity & CA Readiness** | Discovered post-failover via tickets | **Pre-validated** via Graph v2.x licence & sign-in audit |
+| **Executive Ops Visibility** | Ad-hoc status calls | **Real-time Teams Adaptive Card** + wave notices |
+
 - **Zero Split-Brain Profile Corruption**: Hard safety vetoes in `src/Invoke-FencedFslogixLeaseRelease.ps1` refuse to close SMB handles until primary hosts are drained and `445/TCP` is NSG-fenced.
 - **Predictable RTO Without Over-Provisioning**: `ai/Invoke-FslogixIncidentTriage.ps1` computes exact `OptimalBatchSize` and `BatchIntervalSeconds` from live `WVDConnections` and SMB latency telemetry, keeping standby storage below the 80% saturation ceiling.
-- **Executive Ops Bridge Visibility**: `graph/Post-AvdFailoverStatus.ps1` dispatches real-time Adaptive Cards to Microsoft Teams via Graph v1.0.
+- **Executive Ops Bridge Visibility**: `graph/Post-AvdFailoverStatus.ps1` and `identity/AvdIdentityResilience.psm1` validate Entra ID user readiness, inspect Conditional Access sign-in health, and dispatch real-time Adaptive Cards to Microsoft Teams via Graph v1.0.
 
 ---
 
@@ -35,6 +42,11 @@ During a regional Azure outage, naive "flip-the-switch" AVD failovers fail in tw
 ---
 
 ## AI Subcomponent & Pilot Grafting Guide
+
+### Chief Architect / Chief Engineer Pilot-Grafting Instructions
+1. **Entra ID Workload Identity & Graph Scopes**: Grant your DR automation Managed Identity `User.Read.All`, `AuditLog.Read.All`, and `ChannelMessage.Send` in Microsoft Graph v2.x, alongside Azure Storage `Storage File Data SMB Share Elevated Contributor` on the standby Azure Files share.
+2. **Graft onto Existing AVD Host Pools**: Import `identity/AvdIdentityResilience.psm1` ahead of `src/Set-AvdStaggeredDrainMode.ps1` so disabled/unlicensed accounts are filtered out of Wave 1 reconnection cohorts—zero Bicep or Terraform templates required.
+3. **Validate Conditional Access Parity**: Run `Invoke-AvdConditionalAccessSignInCheck` against the secondary region's session hosts before opening Wave 2 to catch regional Conditional Access named-location blocks early.
 
 ### Quickstart: Run AI IOPS Triage & Pester 6.x Verification
 ```powershell
